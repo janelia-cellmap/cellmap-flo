@@ -3,7 +3,7 @@ import logging
 import click
 
 from cellmap_flow.utils.bsub_utils import start_hosts
-from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_link
+from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_link, generate_local_neuroglancer_link
 
 
 logging.basicConfig()
@@ -120,8 +120,12 @@ def dacapo(run_name, iteration, data_path, queue, charge_group):
     default=None,
 )
 def script(script_path, data_path, queue, charge_group):
-    command = f"{SERVER_COMMAND} script -s {script_path} -d {data_path}"
-    run(command, data_path, queue, charge_group)
+    from cellmap_flow.utils.data import ScriptModelConfig
+    model_config = ScriptModelConfig(script_path)
+    generate_local_neuroglancer_link(data_path, model_config)
+
+    # command = f"{SERVER_COMMAND} script -s {script_path} -d {data_path}"
+    # run(command, data_path, queue, charge_group)
 
 
 @cli.command()

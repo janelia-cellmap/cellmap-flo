@@ -26,6 +26,55 @@ def get_raw_layer(dataset_path, filetype):
             )
         )
 
+from funlib.geometry.coordinate import Coordinate
+from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.inferencer import Inferencer
+from cellmap_flow.utils.data import ModelConfig
+from cellmap_flow.local_inferencer import InferencerLocalVolume
+
+def get_inference_layer(dataset_name: str, model_config: ModelConfig, filetype: str):
+    input_voxel_size = Coordinate(model_config.config.input_voxel_size)
+    # block_shape = [int(x) for x in model_config.config.block_shape]
+
+
+    inferencer = Inferencer(model_config)
+
+    # Load or initialize your dataset
+    idi_raw = ImageDataInterface(
+        dataset_name, target_resolution=input_voxel_size
+    )
+    
+    if filetype == "zarr":
+        axis = ["x", "y", "z", "c^"]
+    else:
+        axis = ["z", "y", "x","c^"]
+
+    inference_volume = InferencerLocalVolume(
+    inferencer=inferencer,
+    idi_raw=idi_raw,
+    block_size=(56, 56, 56),
+    dimensions=neuroglancer.CoordinateSpace(
+                names=axis,
+                units=["nm", "nm", "nm", ""],
+                scales=[8,8,8,1],
+            ),
+    volume_type="image",  # or "segmentation"
+    voxel_offset=[0, 0, 0, 0], 
+    encoding="npz",
+    downsampling=None,
+        )
+    return neuroglancer.ImageLayer(
+        source=inference_volume,
+        )
+
+def generate_local_neuroglancer_link(dataset_path, model_config):
+    viewer = neuroglancer.UnsynchronizedViewer()
+    with viewer.txn() as s:
+        s.layers["raw"] = get_raw_layer(dataset_path, "zarr")
+        s.layers["inference"] = get_inference_layer(dataset_path, model_config, "zarr")
+        show(str(viewer))
+        while True:
+            pass
 
 def generate_neuroglancer_link(dataset_path, inference_dict):
     # Create a new viewer

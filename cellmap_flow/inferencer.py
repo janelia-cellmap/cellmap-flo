@@ -30,10 +30,14 @@ def predict(read_roi, write_roi, config, **kwargs):
         raise ValueError("device must be provided in kwargs")
     
     use_half_prediction = kwargs.get("use_half_prediction", False)
+    print(f"Read roi: {read_roi}, write roi: {write_roi}")
+
 
     raw_input = idi.to_ndarray_ts(read_roi)
     raw_input = config.input_normalizer.normalize(raw_input)
     raw_input = np.expand_dims(raw_input, (0, 1))
+
+    print(f"Raw input shape: {raw_input.shape}")
 
     with torch.no_grad():
         raw_input_torch = torch.from_numpy(raw_input).float()
