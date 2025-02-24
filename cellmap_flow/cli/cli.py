@@ -2,8 +2,10 @@ import click
 import logging
 import click
 
-from cellmap_flow.utils.bsub_utils import start_hosts
-from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_link
+from cellmap_flow.server import CellMapFlowServer
+from cellmap_flow.utils.bsub_utils import run_locally, start_hosts
+from cellmap_flow.utils.data import ScriptModelConfig
+from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
 
 
 logging.basicConfig()
@@ -152,17 +154,41 @@ def bioimage(model_path, data_path, queue, charge_group):
     run(command, data_path, queue, charge_group)
 
 
+@cli.command()
+@click.option(
+    "--script_path",
+    "-s",
+    type=str,
+    help="Path to the Python script containing model specification",
+)
+@click.option("--dataset", "-d", type=str, help="Path to the dataset")
+def script_server_check(script_path, dataset):
+    model_config = ScriptModelConfig(script_path=script_path)
+    server = CellMapFlowServer(dataset, model_config)
+    chunk_x = 2
+    chunk_y = 2
+    chunk_z = 2
+
+    server._chunk_impl(None, None, chunk_x, chunk_y, chunk_z, None)
+
+    print("Server check passed")
+
+
 def run(
     command,
     dataset_path,
     queue,
     charge_group,
 ):
-
     host = start_hosts(command, queue, charge_group)
     if host is None:
         raise Exception("Could not start host")
 
     inference_dict = {host: "prediction"}
-
-    generate_neuroglancer_link(dataset_path, inference_dict)
+    neuroglancer_url = generate_neuroglancer_url(dataset_path, inference_dict)
+    ui_host = run_locally(
+        f"cellmap_flow_server run-ui-server -n {neuroglancer_url} -i {host}"
+    )
+    print(host)
+    while True:
+        pass

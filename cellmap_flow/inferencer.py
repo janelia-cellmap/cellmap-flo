@@ -28,11 +28,10 @@ def predict(read_roi, write_roi, config, **kwargs):
     device = kwargs.get("device")
     if device is None:
         raise ValueError("device must be provided in kwargs")
-    
+
     use_half_prediction = kwargs.get("use_half_prediction", False)
 
     raw_input = idi.to_ndarray_ts(read_roi)
-    raw_input = config.input_normalizer.normalize(raw_input)
     raw_input = np.expand_dims(raw_input, (0, 1))
 
     with torch.no_grad():
@@ -54,15 +53,11 @@ class Inferencer:
             self.model_config.config, "write_shape"
         ):
             self.context = (
-               Coordinate(self.model_config.config.read_shape)
+                Coordinate(self.model_config.config.read_shape)
                 - Coordinate(self.model_config.config.write_shape)
             ) / 2
 
         self.optimize_model()
-
-        if not hasattr(self.model_config.config, "input_normalizer"):
-            logger.warning("No input normalization function provided, using default")
-            self.model_config.config.input_normalizer = MinMaxNormalizer()
 
         if not hasattr(self.model_config.config, "normalize_output"):
             logger.warning("No output normalization function provided, using default")
@@ -115,7 +110,12 @@ class Inferencer:
 
         input_roi = output_roi.grow(self.context, self.context)
         result = self.model_config.config.predict(
-            input_roi, output_roi, self.model_config.config, idi=idi, device=self.device, use_half_prediction=self.use_half_prediction
+            input_roi,
+            output_roi,
+            self.model_config.config,
+            idi=idi,
+            device=self.device,
+            use_half_prediction=self.use_half_prediction,
         )
         write_data = self.model_config.config.normalize_output(result)
 
