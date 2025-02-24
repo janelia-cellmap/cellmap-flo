@@ -5,9 +5,10 @@ servers = []
 raw = None
 
 from cellmap_flow.norm.input_normalize import MinMaxNormalizer
+from cellmap_flow.post.postprocessors import DefaultPostprocessor
 
 input_norms = [MinMaxNormalizer()]
-# input_norms = []
+postprocess = [DefaultPostprocessor()]
 
 viewer = None
 

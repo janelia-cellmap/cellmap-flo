@@ -14,12 +14,34 @@ from funlib.geometry.coordinate import Coordinate
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.utils.data import ModelConfig, IP_PATTERN
-from cellmap_flow.utils.web_utils import get_public_ip
-from cellmap_flow.norm.input_normalize import MinMaxNormalizer, get_norm_dataset
+from cellmap_flow.utils.web_utils import get_public_ip, decode_to_json, ARGS_KEY, INPUT_NORM_DICT_KEY, POSTPROCESS_DICT_KEY
+from cellmap_flow.norm.input_normalize import get_normalizations
+from cellmap_flow.post.postprocessors import get_postprocessors
+
 import cellmap_flow.globals as g
-from cellmap_flow.norm.input_normalize import get_norm_dataset
 
 logger = logging.getLogger(__name__)
+
+def get_output_dtype():
+    if len(g.postprocess) == 0:
+      dtype = np.float32
+    else:
+      dtype = g.postprocess[-1].dtype
+    return dtype
+
+def get_process_dataset(dataset:str):
+    if ARGS_KEY not in dataset:
+        return [], [] # No normalization or postprocessing
+    norm_data = dataset.split(ARGS_KEY)
+    if len(norm_data) != 3:
+        raise ValueError(f"Invalid dataset format. Expected two occurrences of {ARGS_KEY}. found {len(norm_data)} {dataset}")
+    encoded_data = norm_data[1]
+    result = decode_to_json(encoded_data)
+    logger.error(f"Decoded data: {result}")
+    input_norm_fns = get_normalizations(result[INPUT_NORM_DICT_KEY])
+    postprocess_fns = get_postprocessors(result[POSTPROCESS_DICT_KEY])
+    logger.error(f"Normalized data: {result}")
+    return input_norm_fns, postprocess_fns
 
 
 class CellMapFlowServer:
@@ -121,7 +143,7 @@ class CellMapFlowServer:
               200:
                 description: Attributes in JSON
             """
-            g.input_norms = get_norm_dataset(dataset)
+            g.input_norms, g.postprocess = get_process_dataset(dataset)
             return self._top_level_attributes_impl(dataset)
 
         @self.app.route("/<path:dataset>/s<int:scale>/attributes.json", methods=["GET"])
@@ -144,7 +166,7 @@ class CellMapFlowServer:
               200:
                 description: Scale-level attributes in JSON
             """
-            g.input_norms = get_norm_dataset(dataset)
+            g.input_norms, g.postprocess = get_process_dataset(dataset)
             return self._attributes_impl(dataset, scale)
 
         @self.app.route(
@@ -235,6 +257,7 @@ class CellMapFlowServer:
         return jsonify(attr), HTTPStatus.OK
 
     def _attributes_impl(self, dataset, scale):
+        dtype = get_output_dtype().__name__
         attr = {
             "transform": {
                 "ordering": "C",
@@ -245,7 +268,7 @@ class CellMapFlowServer:
             },
             "compression": {"type": "gzip", "useZlib": False, "level": -1},
             "blockSize": list(self.n5_block_shape),
-            "dataType": "uint8",
+            "dataType": dtype,
             "dimensions": self.vol_shape.tolist(),
         }
         print(f"Attributes (scale={scale}): {attr}", flush=True)
@@ -256,6 +279,8 @@ class CellMapFlowServer:
         box = np.array([corner, self.read_block_shape[:3]]) * self.output_voxel_size
         roi = Roi(box[0], box[1])
         chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
+        chunk_data = chunk_data.astype(get_output_dtype())
+
         return (
             self.chunk_encoder.encode(chunk_data),
             HTTPStatus.OK,
